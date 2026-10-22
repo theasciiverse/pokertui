@@ -135,10 +135,14 @@ fn step_index(keys: &[u64], current: u64, dir: Cycle) -> usize {
 }
 
 /// Resolve the config file path: `$XDG_CONFIG_HOME/pokertui/config.toml`,
-/// falling back to `$HOME/.config/pokertui/config.toml`.
+/// falling back to `$HOME/.config/pokertui/config.toml`, or on Windows (which
+/// has no `HOME`) `%APPDATA%\pokertui\config.toml`.
 fn config_path() -> Option<PathBuf> {
     let base = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+        #[cfg(windows)]
+        _ => PathBuf::from(std::env::var_os("APPDATA")?),
+        #[cfg(not(windows))]
         _ => PathBuf::from(std::env::var_os("HOME")?).join(".config"),
     };
     Some(base.join("pokertui").join("config.toml"))
