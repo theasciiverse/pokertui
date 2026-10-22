@@ -160,7 +160,7 @@ fn render_opponents(frame: &mut Frame, area: Rect, state: &GameState) {
                 height: active_col.height,
             };
             // Opponent cards stay face-down, so no combination can highlight.
-            render_pod(frame, inset(slot, 2, 1), p, false, &[]);
+            render_pod(frame, inset(slot, 2, 1), p, &[]);
             x = x.saturating_add(slot_w);
         }
     }
@@ -234,7 +234,7 @@ fn render_bottom(frame: &mut Frame, area: Rect, state: &GameState, highlight: &[
     if let Some(hero) = state.hero() {
         // Hero pod is 10 wide × 8 tall, centered.
         let pod_area = centered_rect(hero_row, POD_W, 8);
-        render_pod(frame, pod_area, hero, true, highlight);
+        render_pod(frame, pod_area, hero, highlight);
     }
 
     let action_area = inset(action_row, 2, 0);
@@ -311,7 +311,7 @@ const POD_W: u16 = CARD_W * 2; // 10
 const BOARD_CARD_W: u16 = 7;
 const BOARD_CARD_H: u16 = 5;
 
-fn render_pod(frame: &mut Frame, area: Rect, seat: &Seat, hero_is_actor: bool, highlight: &[Card]) {
+fn render_pod(frame: &mut Frame, area: Rect, seat: &Seat, highlight: &[Card]) {
     let hero = seat.is_hero();
     // Pod is 10 wide × 8 tall — clip what we got.
     let pod = Rect {
@@ -388,12 +388,12 @@ fn render_pod(frame: &mut Frame, area: Rect, seat: &Seat, hero_is_actor: bool, h
 
     // Action line
     let tag = if hero {
-        if hero_is_actor { "▸ TO ACT" } else { "—" }
+        if seat.is_to_act { "▸ TO ACT" } else { "—" }
     } else {
         seat.last_action.as_str()
     };
     let tag_color = match (hero, seat.status) {
-        (true, _) => pal::LIME,
+        (true, _) if seat.is_to_act => pal::LIME,
         (_, SeatStatus::Folded | SeatStatus::Busted) => pal::DIM,
         _ => verb_color(&seat.last_action),
     };
