@@ -35,7 +35,7 @@ pub fn render(frame: &mut Frame, state: &GameState) {
 
     render_title_bar(frame, title_area, state);
 
-    if body.width < 96 || body.height < 30 {
+    if body.width < 96 || body.height < 29 {
         render_too_small(frame, body);
         return;
     }
@@ -107,9 +107,12 @@ fn render_table(frame: &mut Frame, area: Rect, state: &GameState, highlight: &[C
     //   middle  : pot + board, centered
     //   bottom  : hero pod + action bar + key hints
     //
-    // Bottom block height: 8 (hero) + 1 (gap) + 4 (action bar) + 1 (gap) + 1 (hints) = 15
-    let bottom_h: u16 = 15;
+    // Bottom block height: 8 (hero) + 1 (gap) + 4 (action bar) + 1 (gap) + 1 (hints) = 15.
+    // The middle needs 7 rows for pot and board; on a shorter table (down to
+    // a 100x30 terminal) the two gaps in the bottom block give way first.
     let top_h: u16 = 9;
+    let gaps = 2 - (top_h + 7 + 15).saturating_sub(area.height).min(2);
+    let bottom_h: u16 = 13 + gaps;
     let [top_strip, middle, bottom] = Layout::vertical([
         Constraint::Length(top_h),
         Constraint::Min(5),
@@ -119,7 +122,7 @@ fn render_table(frame: &mut Frame, area: Rect, state: &GameState, highlight: &[C
 
     render_opponents(frame, top_strip, state);
     render_center(frame, middle, state, highlight);
-    render_bottom(frame, bottom, state, highlight);
+    render_bottom(frame, bottom, state, highlight, gaps);
 }
 
 fn render_opponents(frame: &mut Frame, area: Rect, state: &GameState) {
@@ -216,12 +219,14 @@ fn render_notice(frame: &mut Frame, area: Rect, text: &str) {
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
 }
 
-fn render_bottom(frame: &mut Frame, area: Rect, state: &GameState, highlight: &[Card]) {
+fn render_bottom(frame: &mut Frame, area: Rect, state: &GameState, highlight: &[Card], gaps: u16) {
+    // `gaps` is how many of the two spacer rows fit: the one below the
+    // action bar goes first, then the one above it.
     let [hero_row, _gap, action_row, _gap2, hints_row] = Layout::vertical([
         Constraint::Length(8),
-        Constraint::Length(1),
+        Constraint::Length(gaps.min(1)),
         Constraint::Length(4),
-        Constraint::Length(1),
+        Constraint::Length(gaps.saturating_sub(1)),
         Constraint::Length(1),
     ])
     .areas(area);
@@ -1126,6 +1131,23 @@ mod tests {
         assert!(
             !frame.contains("1,800"),
             "stale 1,800 placeholder must be gone"
+        );
+    }
+
+    #[test]
+    fn fits_a_100x30_terminal() {
+        let frame = dump(100, 30);
+        println!("\n{}", frame);
+        assert!(!frame.contains("terminal too small"), "100x30 refused");
+        let rows: Vec<&str> = frame.lines().collect();
+        // the board's bottom edge is drawn whole, not under the hero's cards
+        assert!(
+            rows.iter().any(|r| r.matches("╰─────╯").count() == 5),
+            "board cut"
+        );
+        assert!(
+            rows.last().unwrap().contains("check/call"),
+            "key hints missing"
         );
     }
 }
