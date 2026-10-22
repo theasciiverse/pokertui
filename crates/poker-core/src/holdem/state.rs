@@ -157,7 +157,7 @@ impl HandState {
 
         let acted_this_round = vec![false; n];
 
-        HandState {
+        let mut state = HandState {
             config,
             phase: Phase::Preflop,
             board: Vec::new(),
@@ -176,7 +176,14 @@ impl HandState {
             pots: Vec::new(),
             winners: Vec::new(),
             deck,
+        };
+        // Heads-up the small blind acts first, but a short stack can be all-in
+        // from posting it and has no action left: pass the turn on (or run
+        // the board out when nobody can act).
+        if state.all_in[first_to_act] {
+            super::transitions::advance_actor(&mut state);
         }
+        state
     }
 
     pub(crate) fn all_have_acted_this_round(&self, actionable: &[usize]) -> bool {
@@ -248,6 +255,24 @@ mod tests {
             Some(PlayerId(0)),
             "dealer/SB acts first preflop in HU"
         );
+    }
+
+    #[test]
+    fn heads_up_sb_all_in_from_the_blind_passes_the_turn() {
+        // The dealer posts the small blind with its last 50 chips: it has no
+        // action left, so the big blind is first to act.
+        let s = HandState::new_hand(cfg(2), vec![50, 10_000]);
+        assert!(s.all_in[0]);
+        assert_eq!(s.to_act, Some(PlayerId(1)));
+        assert!(!crate::holdem::legal_actions(&s).is_empty());
+    }
+
+    #[test]
+    fn both_blinds_all_in_runs_the_board_out() {
+        let s = HandState::new_hand(cfg(2), vec![50, 100]);
+        assert_eq!(s.phase, Phase::Complete, "nobody can act");
+        assert_eq!(s.board.len(), 5);
+        assert_eq!(s.stacks.iter().sum::<u64>(), 150, "chips conserved");
     }
 
     #[test]

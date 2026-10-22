@@ -207,7 +207,7 @@ fn reopen_action(state: &mut HandState) {
     state.acted_this_round.iter_mut().for_each(|a| *a = false);
 }
 
-fn advance_actor(state: &mut HandState) {
+pub(super) fn advance_actor(state: &mut HandState) {
     if try_terminate_by_folds(state) {
         return;
     }
