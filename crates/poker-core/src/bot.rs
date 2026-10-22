@@ -223,6 +223,35 @@ const BASE_BET_FRACTION: f64 = 0.6;
 /// the pot), take it outright; otherwise the close actions are mixed.
 const STRICT_MARGIN: f64 = 0.15;
 
+/// Each bet or raise opponents have already made in this betting round halves
+/// the chance the bot expects them to fold to another raise: someone who is
+/// raising is rarely about to fold.
+const FOLD_DAMP_PER_RAISE: f64 = 0.5;
+
+/// Each such bet or raise also narrows the range the bot assumes it is up
+/// against: its equity against random hands is raised to the power
+/// `1 + RANGE_SHRINK_PER_RAISE * raises`, which takes little from strong hands
+/// and much from middling ones.
+const RANGE_SHRINK_PER_RAISE: f64 = 0.5;
+
+/// Bets, raises and all-ins by seats other than `seat` in the current betting
+/// round (blinds not counted).
+fn opponent_raises_this_round(state: &HandState, seat: PlayerId) -> i32 {
+    let mut n = 0;
+    for e in state.log.iter().rev() {
+        match &e.kind {
+            LogKind::DealFlop(_) | LogKind::DealTurn(_) | LogKind::DealRiver(_) => break,
+            LogKind::Action(Action::Bet { .. } | Action::Raise { .. } | Action::AllIn)
+                if e.actor != Some(seat) =>
+            {
+                n += 1
+            }
+            _ => {}
+        }
+    }
+    n
+}
+
 /// One scored action under consideration.
 struct Candidate {
     action: Action,
@@ -288,6 +317,12 @@ pub fn decide(
     .pct()
         / 100.0;
 
+    // Facing raises, the opponents' hands are no longer random: discount the
+    // equity and the fold equity for every bet or raise made against us.
+    let raises = opponent_raises_this_round(state, seat);
+    let equity = equity.powf(1.0 + RANGE_SHRINK_PER_RAISE * raises as f64);
+    let fold_damp = FOLD_DAMP_PER_RAISE.powi(raises);
+
     // Choices are decorrelated from the equity simulation's seed.
     let mut rng = StdRng::seed_from_u64(rng_seed ^ 0x9E37_79B9_7F4A_7C15);
 
@@ -324,7 +359,8 @@ pub fn decide(
             foldable
                 .iter()
                 .map(|&j| model.p_fold(PlayerId(j), aggr.increment, pot, profile.fold_equity_prior))
-                .product()
+                .product::<f64>()
+                * fold_damp
         };
         let invest = aggr.invest as f64;
         // EV(bet/raise): win the pot now when everyone folds, otherwise realize
@@ -765,6 +801,47 @@ mod decide_tests {
                 "without fold equity the draw should not raise, got {a:?} (seed {seed})"
             );
         }
+    }
+
+    /// `spot` after the opponent in seat 1 opened and then 4-bet, with the
+    /// hero's 3-bet between: the hero faces two raises this round.
+    fn facing_a_four_bet(hero_hole: &str) -> (HandState, PlayerId) {
+        let (mut s, hero) = spot(0, 1, hero_hole, "", 2_700, 900, 3_600);
+        for (seat, to) in [(1, 300), (0, 900), (1, 2_700)] {
+            s.log.push(LogEntry {
+                actor: Some(PlayerId(seat)),
+                kind: LogKind::Action(Action::Raise { to }),
+            });
+        }
+        (s, hero)
+    }
+
+    #[test]
+    fn a_middling_hand_stops_raising_into_a_four_bet() {
+        // 9-8 offsuit is close to even against a random hand, but not against
+        // someone who keeps raising.
+        let (s, hero) = facing_a_four_bet("9c 8d");
+        let model = OpponentModel::new(6);
+        for profile in BotProfile::ALL {
+            for seed in 0..20 {
+                let a = decide(&s, hero, &profile, &model, seed);
+                assert!(
+                    !is_aggressive(a),
+                    "{} re-raised 9-8 into a 4-bet: {a:?} (seed {seed})",
+                    profile.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn aces_still_raise_into_a_four_bet() {
+        let (s, hero) = facing_a_four_bet("Ah Ad");
+        let model = OpponentModel::new(6);
+        let raises = (0..20)
+            .filter(|&seed| is_aggressive(decide(&s, hero, &BotProfile::tag(), &model, seed)))
+            .count();
+        assert!(raises >= 15, "aces re-raised only {raises} of 20 times");
     }
 
     #[test]
