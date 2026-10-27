@@ -50,3 +50,9 @@ Written to be offered upstream as pull requests:
 
 Linux: all tests pass; static musl build played at 100x30. Windows:
 cross-built with MinGW, not run. macOS: not built here.
+
+## Ours
+
+- **How to play it, at the top of README.md.** A short note on installing and
+  starting it with av, or from a release archive; the original text follows
+  unchanged.

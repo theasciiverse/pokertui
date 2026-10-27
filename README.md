@@ -1,3 +1,16 @@
+> **Play it with Asciiverse.** With [av](https://asciiverse.sh), the Asciiverse
+> client:
+>
+> ```
+> av install pokertui
+> av play pokertui
+> ```
+>
+> Or download the archive for your system from this repository's Releases,
+> unpack it and run `./pokertui` (`pokertui.exe` on Windows).
+>
+> The original README follows.
+
 # Pokertui 🃏
 
 A terminal Texas Hold'em game written in Rust. Play heads-up or full-ring
